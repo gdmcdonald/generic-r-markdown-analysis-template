@@ -1,4 +1,4 @@
-# Generic-R-markdown-Analysis-Template
+# Generic R-markdown Analysis Template
 
 Template for analysis of a folder full of .csv files in R.
 
