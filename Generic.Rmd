@@ -1,0 +1,105 @@
+---
+title: "Generic Analysis Template"
+author: "Gordon McDonald"
+date: "16/10/2018"
+output: 
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+---
+
+This is a generic template for analysing a folder full of .csv files whose names give metadata about the data inside.
+
+# 1. Load Packages and Data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      cache.lazy = FALSE)
+
+LoadPackages <- function(x){ for( i in x ){ if( ! require( i , character.only = TRUE ) ){
+  install.packages( i , dependencies = TRUE , repos = "http://cran.us.r-project.org")
+  require( i , character.only = TRUE )}}}
+
+#  Then try/install packages...
+LoadPackages(c("tidyverse",
+               "here",
+               "ggplot2",
+               "lubridate",
+               "data.table",
+               "GGally",
+               "plotly"))
+
+```
+
+```{r loaddata}
+data_path <- here::here("data/")
+#print(data_path)
+
+#get all .csv files in data/ directory
+file_names_to_read<-list.files(path = data_path, pattern = "*.csv")
+
+#extract metadata from filenames
+file_metadata<-data.frame(file_name = file_names_to_read, stringsAsFactors = F) %>% 
+  #add full paths
+  mutate(full_path = paste0(data_path,file_name,sep = ""),
+         # extract information from file names
+         # Could need regexp here if they are not as consistent in naming.
+         # example: "Thing 3 Category L.csv" 
+         # "3" is character 7, "L" is character 18.
+         Thing = factor(substr(file_name, 7,7)),
+         Category = factor(substr(file_name,18,18)))
+
+```
+
+Summary of categorical counts in metadata
+```{r metadatasummary}
+#print summary of interesting columns in metadata
+metadata_cols_of_interest<-names(file_metadata)[!(names(file_metadata) %in% c("file_name","full_path"))]
+summary(file_metadata[,metadata_cols_of_interest])
+
+#read all the files in a loop
+all_data<-lapply(1:nrow(file_metadata),
+                 function(file_number){
+                   fread(file_metadata$full_path[file_number])[
+                     ,file:=file_metadata$file_name[file_number]]
+                 }) %>% 
+  rbind_list() %>% 
+  #join to metadata
+  inner_join(file_metadata,by = c("file"="file_name"))
+
+# #add cols
+# all_data <- all_data %>% 
+#   mutate(new_col = some_function_of_old_cols)
+
+```
+
+Summary of interesting columns in imported data
+```{r datasummary}
+#print summary of interesting columns in all_data
+summary(all_data[,!(names(all_data) %in% c("file","full_path"))])
+
+
+#summarize numeric data by metadata groups
+summary_data<-all_data %>% 
+  group_by_(.dots = metadata_cols_of_interest) %>% 
+  select_if(is.numeric) %>% 
+  summarise_all(c("mean","sd"),na.rm = T) %>% 
+  ungroup()
+```
+
+# 2. Pair-plot Graph of everything
+```{r pairplotgraph}
+factor_or_num_cols<-lapply(all_data,function(x){is.numeric(x) | is.factor(x)}) %>% unlist
+
+GGally::ggpairs(all_data[,factor_or_num_cols],mapping = aes(alpha = 0.5))
+```
+
+
